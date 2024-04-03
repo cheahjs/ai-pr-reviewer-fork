@@ -6,9 +6,9 @@ permissions:
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [ opened, synchronize, reopened ]
   pull_request_review_comment:
-    types: [created]
+    types: [ created ]
 
 concurrency:
   group:
@@ -26,6 +26,12 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
           ref: ${{github.event.pull_request.head.ref}}
           submodules: false
+      - name: Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
       - uses: ./
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -33,7 +39,9 @@ jobs:
         with:
           debug: true
           review_comment_lgtm: false
-          openai_heavy_model: gpt-4
+          openai_heavy_model: 'Gemini 1.5 Pro'
+          openai_light_model: 'Groq: Mixtral 8x7b'
+          openai_base_url: https://llm.tail2c702.ts.net/litellm
           path_filters: |
             !dist/**
             !**/*.lock
