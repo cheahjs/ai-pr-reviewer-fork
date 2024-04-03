@@ -30,9 +30,10 @@ export class Bot implements BotProtocol {
       ])
 
       this.model = new ChatOpenAI({
-        temperature: options.openaiModelTemperature,
+        modelName: openaiOptions.model,
         maxTokens: openaiOptions.tokenLimits.responseTokens,
         openAIApiKey: process.env.OPENAI_API_KEY,
+        temperature: this.options.openaiModelTemperature,
         timeout: this.options.openaiTimeoutMS,
         maxRetries: this.options.openaiRetries,
         configuration: {
