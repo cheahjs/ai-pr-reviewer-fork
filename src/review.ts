@@ -364,13 +364,11 @@ ${
     }
   }
 
-  const summaryPromises = []
+  const summaryPromises: Promise<[string, string, boolean] | null>[] = []
   const skippedFiles = []
   for (const [filename, fileContent, fileDiff] of filesAndChanges) {
     if (options.maxFiles <= 0 || summaryPromises.length < options.maxFiles) {
-      summaryPromises.push(
-        async () => await doSummary(filename, fileContent, fileDiff)
-      )
+      summaryPromises.push(doSummary(filename, fileContent, fileDiff))
     } else {
       skippedFiles.push(filename)
     }
@@ -662,12 +660,10 @@ ${commentChain}
       }
     }
 
-    const reviewPromises = []
+    const reviewPromises: Promise<void>[] = []
     for (const [filename, fileContent, , patches] of filesAndChangesReview) {
       if (options.maxFiles <= 0 || reviewPromises.length < options.maxFiles) {
-        reviewPromises.push(async () => {
-          await doReview(filename, fileContent, patches)
-        })
+        reviewPromises.push(doReview(filename, fileContent, patches))
       } else {
         skippedFiles.push(filename)
       }
