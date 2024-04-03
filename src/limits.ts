@@ -24,6 +24,14 @@ export class TokenLimits {
         this.maxTokens = 16300
         this.responseTokens = 3000
         break
+      case 'Groq: Mixtral 8x7b':
+        this.maxTokens = 32768
+        this.responseTokens = 4000
+        break
+      case 'Gemini 1.5 Pro':
+        this.maxTokens = 1048576
+        this.responseTokens = 8000
+        break
       default:
         this.maxTokens = 4000
         this.responseTokens = 1000
