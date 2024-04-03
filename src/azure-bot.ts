@@ -1,5 +1,3 @@
-import './fetch-polyfill'
-
 import {info, setFailed, warning} from '@actions/core'
 import {ConversationChain} from 'langchain/chains'
 import {ChatOpenAI} from '@langchain/openai'
