@@ -1,7 +1,6 @@
 import {error, info, warning} from '@actions/core'
 // eslint-disable-next-line camelcase
 import {context as github_context} from '@actions/github'
-import pLimit from 'p-limit'
 import {BotProtocol} from './bot-interface'
 import {
   Commenter,
@@ -31,9 +30,6 @@ export const codeReview = async (
   prompts: Prompts
 ): Promise<void> => {
   const commenter: Commenter = new Commenter()
-
-  const openaiConcurrencyLimit = pLimit(options.openaiConcurrencyLimit)
-  const githubConcurrencyLimit = pLimit(options.githubConcurrencyLimit)
 
   if (
     context.eventName !== 'pull_request' &&
@@ -170,58 +166,57 @@ export const codeReview = async (
   const filteredFiles: Array<
     [string, string, string, Array<[number, number, string]>] | null
   > = await Promise.all(
-    filterSelectedFiles.map(file =>
-      githubConcurrencyLimit(async () => {
-        // retrieve file contents
-        let fileContent = ''
-        if (context.payload.pull_request == null) {
-          warning('Skipped: context.payload.pull_request is null')
-          return null
-        }
-        try {
-          const contents = await octokit.repos.getContent({
-            owner: repo.owner,
-            repo: repo.repo,
-            path: file.filename,
-            ref: context.payload.pull_request.base.sha
-          })
-          if (contents.data != null) {
-            if (!Array.isArray(contents.data)) {
-              if (
-                contents.data.type === 'file' &&
-                contents.data.content != null
-              ) {
-                fileContent = Buffer.from(
-                  contents.data.content,
-                  'base64'
-                ).toString()
-              }
+    filterSelectedFiles.map(async file => {
+      // retrieve file contents
+      let fileContent = ''
+      if (context.payload.pull_request == null) {
+        warning('Skipped: context.payload.pull_request is null')
+        return null
+      }
+      try {
+        const contents = await octokit.repos.getContent({
+          owner: repo.owner,
+          repo: repo.repo,
+          path: file.filename,
+          ref: context.payload.pull_request.base.sha
+        })
+        if (contents.data != null) {
+          if (!Array.isArray(contents.data)) {
+            if (
+              contents.data.type === 'file' &&
+              contents.data.content != null
+            ) {
+              fileContent = Buffer.from(
+                contents.data.content,
+                'base64'
+              ).toString()
             }
           }
-        } catch (e: any) {
-          warning(
-            `Failed to get file contents: ${
-              e as string
-            }. This is OK if it's a new file.`
-          )
         }
+      } catch (e: any) {
+        warning(
+          `Failed to get file contents: ${
+            e as string
+          }. This is OK if it's a new file.`
+        )
+      }
 
-        let fileDiff = ''
-        if (file.patch != null) {
-          fileDiff = file.patch
+      let fileDiff = ''
+      if (file.patch != null) {
+        fileDiff = file.patch
+      }
+
+      const patches: Array<[number, number, string]> = []
+      for (const patch of splitPatch(file.patch)) {
+        const patchLines = patchStartEndLine(patch)
+        if (patchLines == null) {
+          continue
         }
-
-        const patches: Array<[number, number, string]> = []
-        for (const patch of splitPatch(file.patch)) {
-          const patchLines = patchStartEndLine(patch)
-          if (patchLines == null) {
-            continue
-          }
-          const hunks = parsePatch(patch)
-          if (hunks == null) {
-            continue
-          }
-          const hunksStr = `
+        const hunks = parsePatch(patch)
+        if (hunks == null) {
+          continue
+        }
+        const hunksStr = `
 ---new_hunk---
 \`\`\`
 ${hunks.newHunk}
@@ -232,24 +227,23 @@ ${hunks.newHunk}
 ${hunks.oldHunk}
 \`\`\`
 `
-          patches.push([
-            patchLines.newHunk.startLine,
-            patchLines.newHunk.endLine,
-            hunksStr
-          ])
-        }
-        if (patches.length > 0) {
-          return [file.filename, fileContent, fileDiff, patches] as [
-            string,
-            string,
-            string,
-            Array<[number, number, string]>
-          ]
-        } else {
-          return null
-        }
-      })
-    )
+        patches.push([
+          patchLines.newHunk.startLine,
+          patchLines.newHunk.endLine,
+          hunksStr
+        ])
+      }
+      if (patches.length > 0) {
+        return [file.filename, fileContent, fileDiff, patches] as [
+          string,
+          string,
+          string,
+          Array<[number, number, string]>
+        ]
+      } else {
+        return null
+      }
+    })
   )
 
   // Filter out any null results
@@ -370,15 +364,11 @@ ${
     }
   }
 
-  const summaryPromises = []
+  const summaryPromises: Promise<[string, string, boolean] | null>[] = []
   const skippedFiles = []
   for (const [filename, fileContent, fileDiff] of filesAndChanges) {
     if (options.maxFiles <= 0 || summaryPromises.length < options.maxFiles) {
-      summaryPromises.push(
-        openaiConcurrencyLimit(
-          async () => await doSummary(filename, fileContent, fileDiff)
-        )
-      )
+      summaryPromises.push(doSummary(filename, fileContent, fileDiff))
     } else {
       skippedFiles.push(filename)
     }
@@ -386,7 +376,7 @@ ${
 
   const summaries = (await Promise.all(summaryPromises)).filter(
     summary => summary !== null
-  ) as Array<[string, string, boolean]>
+  ) as unknown as Array<[string, string, boolean]>
 
   if (summaries.length > 0) {
     const batchSize = 10
@@ -670,14 +660,10 @@ ${commentChain}
       }
     }
 
-    const reviewPromises = []
+    const reviewPromises: Promise<void>[] = []
     for (const [filename, fileContent, , patches] of filesAndChangesReview) {
       if (options.maxFiles <= 0 || reviewPromises.length < options.maxFiles) {
-        reviewPromises.push(
-          openaiConcurrencyLimit(async () => {
-            await doReview(filename, fileContent, patches)
-          })
-        )
+        reviewPromises.push(doReview(filename, fileContent, patches))
       } else {
         skippedFiles.push(filename)
       }
@@ -884,6 +870,7 @@ function parseReview(
   let currentStartLine: number | null = null
   let currentEndLine: number | null = null
   let currentComment = ''
+
   function storeReview(): void {
     if (currentStartLine !== null && currentEndLine !== null) {
       const review: Review = {

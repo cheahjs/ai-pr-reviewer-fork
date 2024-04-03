@@ -32,9 +32,7 @@
     "@octokit/action": "^6.0.7",
     "langchain": "^0.1.30",
     "minimatch": "^9.0.4",
-    "node-fetch": "^3.3.2",
-    "p-limit": "^5.0.0",
-    "p-retry": "^6.2.0"
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
